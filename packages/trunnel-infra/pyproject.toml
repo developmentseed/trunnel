@@ -1,0 +1,23 @@
+[project]
+name = "trunnel-infra"
+version = "0.1.0"
+description = "AWS CDK Construct for self-healing Trunnel Bastion hosts"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = []
+dependencies = [
+    "aws-cdk-lib>=2.120.0",
+    "constructs>=10.3.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/trunnel_infra"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

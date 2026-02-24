@@ -1,0 +1,22 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "separate-pull-requests": true,
+  "include-component-in-tag": true,
+  "packages": {
+    "packages/trunnel-cli": {
+      "release-type": "python",
+      "package-name": "trunnel-cli",
+      "changelog-path": "CHANGELOG.md"
+    },
+    "packages/trunnel-infra": {
+      "release-type": "python",
+      "package-name": "trunnel-infra",
+      "changelog-path": "CHANGELOG.md"
+    }
+  },
+  "plugins": [
+    {
+      "type": "sentence-case"
+    }
+  ]
+}
