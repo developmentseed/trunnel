@@ -74,18 +74,16 @@ bastion.export_security_group("BastionSG-Production")
 ## Trunnel CLI
 
 The Trunnel CLI makes it easy to find the bastion host and connect to your RDS database via an encrypted SSM tunnel.
-Install it into your project's development dependencies:
-
-```bash
-uv add --group deploy "trunnel-cli @ git+https://github.com/developmentseed/trunnel#subdirectory=packages/trunnel-cli"
-```
+This tool is basically a wrapper around the AWS CLI and the SSM Session Manager Plugin that helps lookup the correct
+values for bridging the connection. It does this by finding resources that are tagged according with some configurable
+`key=value` pair.
 
 ### Example Usage
 
 To connect to an RDS instance tagged with App=my-service:
 
 ```bash
-$ trunnel --rds-value my-service --reconnect
+$ trunnel --rds-key Service --rds-value payments-api --reconnect
 
 🔍 Searching AWS...
 Select a Bastion:
@@ -94,15 +92,24 @@ Select a Bastion:
 
 Enter Bastion ID: i-0abcd1234efgh5678
 
-🚀 Trunnel Active: localhost:5432 -> my-service-db.cluster.aws.com
-🔗 my-service-db via Production-Bastion (i-0abcd1234efgh5678)
+🚀 Trunnel Active: localhost:5432 -> payments-api-db.cluster.aws.com
+🔗 payments-api-db via Production-Bastion (i-0abcd1234efgh5678)
 
 Starting session with SessionId: developer-0123456789abcdef
 Port 5432 opened for session developer-0123456789abcdef.
 Waiting for connections...
 ```
 
-You can also view the full help text,
+The Trunnel CLI can read You might consider using [direnv](https://direnv.net/) to help automate the resource tagging
+definitions. For example,
+
+```bash
+# .envrc
+export TRUNNEL_RDS_KEY=Service
+export TRUNNEL_RDS_VALUE=payments-api
+```
+
+You can also view the full help text by passing `--help`,
 
 ```bash
 $ trunnel --help
@@ -112,14 +119,27 @@ Usage: trunnel [OPTIONS]
   Securely bore a tunnel to RDS via Trunnel.
 
 Options:
-  --bastion-key TEXT     Tag key for Bastion. [default: Role]
-  --bastion-value TEXT   Tag value for Bastion. [default: Bastion]
-  --rds-key TEXT         Tag key for RDS. [default: App]
-  --rds-value TEXT       Tag value for RDS. [required]
-  --local-port INTEGER   [default: 5432]
-  --profile TEXT         AWS CLI profile.
-  --reconnect            Auto-retry on disconnect.
-  --help                 Show this message and exit.
+  --bastion-key TEXT    Tag key for Bastion.  [env var: TRUNNEL_BASTION_KEY; default: Role]
+  --bastion-value TEXT  Tag value for Bastion.  [env var: TRUNNEL_BASTION_VALUE; default: Bastion]
+  --rds-key TEXT        Tag key for RDS.  [env var: TRUNNEL_RDS_KEY; required]
+  --rds-value TEXT      Tag value for RDS.  [env var: TRUNNEL_RDS_VALUE; required]
+  --local-port INTEGER  [env var: TRUNNEL_LOCAL_PORT; default: 5432]
+  --profile TEXT        AWS CLI profile.  [env var: TRUNNEL_PROFILE]
+  --reconnect           Auto-retry on disconnect.  [env var: TRUNNEL_RECONNECT]
+  --help                Show this message and exit.
+```
+
+### Installation
+
+Before beginning, you must first have the following installed,
+
+- AWS CLI v2
+- SSM Session Manager Plugin
+
+Next, it into your project's development dependencies (for example using `uv`):
+
+```bash
+uv add --dev "trunnel-cli @ git+https://github.com/developmentseed/trunnel#subdirectory=packages/trunnel-cli"
 ```
 
 [East Side Trolley Tunnel]: https://en.wikipedia.org/wiki/East_Side_Trolley_Tunnel
