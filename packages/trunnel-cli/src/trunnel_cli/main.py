@@ -29,7 +29,7 @@ def _select_resource[T: Discoverable](resources: list[T], label: str) -> T:
 
     Returns
     -------
-    Resource
+    Discoverable
         The selected resource.
 
     Raises

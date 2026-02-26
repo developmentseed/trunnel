@@ -137,11 +137,9 @@ class TunnelDiscoverer:
             return []
 
         # Fetch the actual Endpoints for those matched ARNs
-        matches: list[Database] = []
         rds_paginator = self._rds.get_paginator("describe_db_instances")
 
-        # describe_db_instances doesn't accept a list of ARNs natively,
-        # but filtering the response locally is now O(1) in API calls!
+        matches: list[Database] = []
         for rds_page in rds_paginator.paginate():
             for db in rds_page.get("DBInstances", []):
                 if db["DBInstanceArn"] in tagged_arns and db.get("DBInstanceStatus") == "available":
