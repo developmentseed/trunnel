@@ -49,8 +49,6 @@ class AutoRotatingBastion(Construct):
         to t3.micro.
     lambda_runtime : lambda_.Runtime, optional
         The runtime for the refresh Lambda. Defaults to Python 3.12.
-    export_sg_name : str, optional
-        If specified, create a Stack export for the security group ID of the bastion.
     bastion_key : str, optional
         Tag key used by Trunnel CLI to discover the bastion.
     bastion_value : str, optional
@@ -69,7 +67,6 @@ class AutoRotatingBastion(Construct):
         ami: str | None = None,
         instance_type: ec2.InstanceType | None = None,
         lambda_runtime: lambda_.Runtime = lambda_.Runtime.PYTHON_3_12,
-        export_sg_name: str | None = None,
         bastion_key: str = "Role",
         bastion_value: str = "Bastion",
         bastion_name: str = "Bastion",
@@ -130,14 +127,29 @@ class AutoRotatingBastion(Construct):
             assert ami is not None
             self._setup_auto_refresh(self.asg, ami, lambda_runtime)
 
-        # Stack export
-        if export_sg_name:
-            CfnOutput(
-                self,
-                "BastionSgExport",
-                value=self.bastion_sg.security_group_id,
-                export_name=export_sg_name,
-            )
+    def export_security_group(self, export_name: str) -> CfnOutput:
+        """
+        Exports the Bastion's Security Group ID to CloudFormation exports.
+
+        This allows decoupled RDS stacks to independently lookup and authorize
+        the Bastion's security group using `Fn.import_value()`.
+
+        Parameters
+        ----------
+        export_name : str
+            The globally unique name for the CloudFormation export.
+
+        Returns
+        -------
+        CfnOutput
+            The CloudFormation output construct.
+        """
+        return CfnOutput(
+            self,
+            "BastionSgExport",
+            value=self.bastion_sg.security_group_id,
+            export_name=export_name,
+        )
 
     def _setup_auto_refresh(
         self, asg: autoscaling.IAutoScalingGroup, param_name: str, runtime: lambda_.Runtime

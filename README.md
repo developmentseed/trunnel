@@ -65,9 +65,10 @@ AutoRotatingBastion(
     # Tracks an SSM parameter. Updating the parameter triggers
     # a zero-downtime rolling Instance Refresh.
     ami="/company/images/latest-linux-ami"
-    # Optionally export the Security Group ID so other stacks can reference it
-    export_sg_name="BastionSG-Production"
 )
+
+# Export the Security Group ID so other stacks can reference it
+bastion.export_security_group("BastionSG-Production")
 ```
 
 ## Trunnel CLI
