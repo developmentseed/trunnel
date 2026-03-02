@@ -1,3 +1,7 @@
+# Custom
+.DS_Store
+
+# ===== Github Python.gitignore defaults below
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

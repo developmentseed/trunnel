@@ -1,0 +1,145 @@
+# Trunnel
+
+> Automated SSM tunneling and self-healing bastion host for private RDS.
+
+```text
+       __________________________________________________________________
+      | %%% H H H H H H H H H H H H H H H H H H H H H H H H H H H H H%%%|
+      | %%% H H H H H H H H H H H H H H H H H H H H H H H H H H H H H%%%|
+      | %%% [ ] [ ] [ ] [ ] [ ] [ ] [ ] [ ] [ ] [ ] [ ] [ ] [ ] [ ]  %%%|
+      | %%%__________________________________________________________%%%|
+      | %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%|
+      | %%%%%%     _________________        _________________     %%%%%%|
+      | %%%%%     / ############### \      / ############### \     %%%%%|
+      | %%%%     / ################# \    / ################# \     %%%%|
+      | %%%     | ####### [ ] ####### |  | ####### [ ] ####### |     %%%|
+      | %%%     | #####  LOCAL  ##### |  | #####  PRIVATE ##### |    %%%|
+      | %%%     | ####  MACHINE  #### |  | ####    RDS    #### |     %%%|
+      | %%%     | #####  :5432  ##### |  | #####  ACCESS  ##### |    %%%|
+      | %%%     | ################### |  | ################### |     %%%|
+     _| %%%_____| ################### |__| ################### |_____%%%|_
+    | |=========| ################### |==| ################### |========| |
+    |_|_________|_____________________|__|_____________________|________|_|
+      [ SSM ]   ################################################  [ VPC ]
+```
+
+Trunnel (a play on the [East Side Trolley Tunnel], or a wooden peg used to form a strong connection between pieces of
+wood) helps automate securely connecting to your private AWS infrastructure through AWS Systems Manager (SSM). It
+replaces manual SSH management with automated SSM discovery and a self-healing CDK bastion. Trunnel does NOT handle
+fetching database credentials, but does make it easier to securely make the connection.
+
+This tool was designed in response to help reduce minor frustrations like,
+
+- What is the EC2 instance identifier for my bastion host?
+- What is the RDS host URL and port I need to use?
+- What is the syntax for the `aws ssm` command I need to use?
+- How can I keep my Bastion host up to date with new AMIs?
+
+Trunnel is composed of two packages: one for infrastructure deployment (`trunnel-infra`) and another for end users
+(`trunnel-cli`).
+
+## Trunnel Infrastructure
+
+To deploy the EC2 bastion host using AWS Cloud Development Kit (CDK), first add the package to your deployment
+dependencies.
+
+```bash
+uv add --group deploy "trunnel-infra @ git+https://github.com/developmentseed/trunnel#subdirectory=packages/trunnel-infra"
+```
+
+Next, integrate the AutoRotatingBastion construct into your CDK stack. It handles the Auto Scaling Group (ASG) setup,
+SSM permissions, and automated AMI rotation logic.
+
+```python
+from trunnel_infra.bastion import AutoRotatingBastion
+
+# Inside your Stack...
+AutoRotatingBastion(
+    self,
+    "Bastion",
+    vpc=vpc,
+    # Databases you want to connect to can be specified below.
+    # You could also leave this blank if you'd prefer to have
+    # RDS owners manage their own Security Group ingress rules
+    db_targets=[my_rds_instance],
+    # Tracks an SSM parameter. Updating the parameter triggers
+    # a zero-downtime rolling Instance Refresh.
+    ami="/company/images/latest-linux-ami"
+)
+
+# Export the Security Group ID so other stacks can reference it
+bastion.export_security_group("BastionSG-Production")
+```
+
+## Trunnel CLI
+
+The Trunnel CLI makes it easy to find the bastion host and connect to your RDS database via an encrypted SSM tunnel.
+This tool is basically a wrapper around the AWS CLI and the SSM Session Manager Plugin that helps lookup the correct
+values for bridging the connection. It does this by finding resources that are tagged according with some configurable
+`key=value` pair.
+
+### Example Usage
+
+To connect to an RDS instance tagged with App=my-service:
+
+```bash
+$ trunnel --rds-key Service --rds-value payments-api --reconnect
+
+🔍 Searching AWS...
+Select a Bastion:
+ • i-0abcd1234efgh5678 - Production-Bastion
+ • i-09876fedcba54321 - Staging-Bastion
+
+Enter Bastion ID: i-0abcd1234efgh5678
+
+🚀 Trunnel Active: localhost:5432 -> payments-api-db.cluster.aws.com
+🔗 payments-api-db via Production-Bastion (i-0abcd1234efgh5678)
+
+Starting session with SessionId: developer-0123456789abcdef
+Port 5432 opened for session developer-0123456789abcdef.
+Waiting for connections...
+```
+
+The Trunnel CLI can read You might consider using [direnv](https://direnv.net/) to help automate the resource tagging
+definitions. For example,
+
+```bash
+# .envrc
+export TRUNNEL_RDS_KEY=Service
+export TRUNNEL_RDS_VALUE=payments-api
+```
+
+You can also view the full help text by passing `--help`,
+
+```bash
+$ trunnel --help
+
+Usage: trunnel [OPTIONS]
+
+  Securely bore a tunnel to RDS via Trunnel.
+
+Options:
+  --bastion-key TEXT    Tag key for Bastion.  [env var: TRUNNEL_BASTION_KEY; default: Role]
+  --bastion-value TEXT  Tag value for Bastion.  [env var: TRUNNEL_BASTION_VALUE; default: Bastion]
+  --rds-key TEXT        Tag key for RDS.  [env var: TRUNNEL_RDS_KEY; required]
+  --rds-value TEXT      Tag value for RDS.  [env var: TRUNNEL_RDS_VALUE; required]
+  --local-port INTEGER  [env var: TRUNNEL_LOCAL_PORT; default: 5432]
+  --profile TEXT        AWS CLI profile.  [env var: TRUNNEL_PROFILE]
+  --reconnect           Auto-retry on disconnect.  [env var: TRUNNEL_RECONNECT]
+  --help                Show this message and exit.
+```
+
+### Installation
+
+Before beginning, you must first have the following installed,
+
+- AWS CLI v2
+- SSM Session Manager Plugin
+
+Next, it into your project's development dependencies (for example using `uv`):
+
+```bash
+uv add --dev "trunnel-cli @ git+https://github.com/developmentseed/trunnel#subdirectory=packages/trunnel-cli"
+```
+
+[East Side Trolley Tunnel]: https://en.wikipedia.org/wiki/East_Side_Trolley_Tunnel
