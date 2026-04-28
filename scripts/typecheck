@@ -1,6 +1,4 @@
 #!/bin/bash
 
-set -e
-
 echo "🏷️  Checking types..."
 uv run ty check packages/
