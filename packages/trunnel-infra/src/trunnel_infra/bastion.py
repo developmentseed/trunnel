@@ -47,6 +47,12 @@ class AutoRotatingBastion(Construct):
     instance_type : ec2.InstanceType, optional
         Ec2 instance type to use for the bastion host. If not provided defaults
         to t3.micro.
+    user_data : ec2.UserData, optional
+        UserData script to run on instance launch. When ``ami`` is ``None``
+        (default AL2023), defaults to :meth:`amazon_linux_user_data` which
+        configures ``dnf-automatic`` for security-only updates. When a custom
+        AMI is provided no UserData is added by default — use
+        :meth:`debian_user_data` or supply a fully custom script.
     lambda_runtime : lambda_.Runtime, optional
         The runtime for the refresh Lambda. Defaults to Python 3.12.
     bastion_key : str, optional
@@ -57,6 +63,28 @@ class AutoRotatingBastion(Construct):
         Value for the "Name" tag, displayed in the CLI selector.
     """
 
+    @staticmethod
+    def amazon_linux_user_data() -> ec2.UserData:
+        """UserData for Amazon Linux 2023: enables dnf-automatic security updates."""
+        ud = ec2.UserData.for_linux()
+        ud.add_commands(
+            "dnf install -y dnf-automatic",
+            "sed -i 's/^upgrade_type = .*/upgrade_type = security/' /etc/dnf/automatic.conf",
+            "sed -i 's/^apply_updates = .*/apply_updates = yes/' /etc/dnf/automatic.conf",
+            "systemctl enable --now dnf-automatic.timer",
+        )
+        return ud
+
+    @staticmethod
+    def debian_user_data() -> ec2.UserData:
+        """UserData for Debian/Ubuntu AMIs: enables unattended-upgrades."""
+        ud = ec2.UserData.for_linux()
+        ud.add_commands(
+            "apt-get install -y unattended-upgrades",
+            "dpkg-reconfigure --priority=low unattended-upgrades",
+        )
+        return ud
+
     def __init__(
         self,
         scope: Construct,
@@ -66,12 +94,16 @@ class AutoRotatingBastion(Construct):
         db_targets: list[rds.IDatabaseInstance | rds.IDatabaseCluster],
         ami: str | None = None,
         instance_type: ec2.InstanceType | None = None,
+        user_data: ec2.UserData | None = None,
         lambda_runtime: lambda_.Runtime = lambda_.Runtime.PYTHON_3_12,
         bastion_key: str = "Role",
         bastion_value: str = "Bastion",
         bastion_name: str = "Bastion",
     ) -> None:
         super().__init__(scope, id)
+
+        if user_data is None and ami is None:
+            user_data = AutoRotatingBastion.amazon_linux_user_data()
 
         is_ssm = isinstance(ami, str) and ami.startswith("/")
         if is_ssm:
@@ -109,6 +141,7 @@ class AutoRotatingBastion(Construct):
             max_capacity=2,
             update_policy=autoscaling.UpdatePolicy.rolling_update(min_instances_in_service=1),
             require_imdsv2=True,
+            user_data=user_data,
         )
         self.asg.role.add_managed_policy(
             iam.ManagedPolicy.from_aws_managed_policy_name("AmazonSSMManagedInstanceCore")

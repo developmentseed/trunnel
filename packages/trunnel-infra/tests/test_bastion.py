@@ -87,6 +87,60 @@ def test_bastion_automation_with_ssm_param(
     )
 
 
+def test_bastion_default_user_data(
+    cdk_context: tuple[Stack, ec2.Vpc, rds.IDatabaseInstance],
+) -> None:
+    """Default UserData should configure dnf-automatic for security updates."""
+    stack, vpc, db = cdk_context
+    AutoRotatingBastion(stack, "DefaultBastion", vpc=vpc, db_targets=[db])
+    template = Template.from_stack(stack)
+
+    template.has_resource_properties(
+        "AWS::AutoScaling::LaunchConfiguration",
+        {"UserData": Match.object_like({"Fn::Base64": Match.string_like_regexp("dnf-automatic")})},
+    )
+
+
+def test_bastion_custom_user_data(
+    cdk_context: tuple[Stack, ec2.Vpc, rds.IDatabaseInstance],
+) -> None:
+    """Custom UserData should be passed through to the LaunchConfiguration."""
+    stack, vpc, db = cdk_context
+    custom_ud = ec2.UserData.for_linux()
+    custom_ud.add_commands("echo hello-custom")
+
+    AutoRotatingBastion(stack, "CustomBastion", vpc=vpc, db_targets=[db], user_data=custom_ud)
+    template = Template.from_stack(stack)
+
+    template.has_resource_properties(
+        "AWS::AutoScaling::LaunchConfiguration",
+        {"UserData": Match.object_like({"Fn::Base64": Match.string_like_regexp("hello-custom")})},
+    )
+
+
+def test_bastion_no_default_user_data_for_custom_ami(
+    cdk_context: tuple[Stack, ec2.Vpc, rds.IDatabaseInstance],
+) -> None:
+    """Custom AMIs should not receive dnf-automatic UserData by default."""
+    stack, vpc, db = cdk_context
+    AutoRotatingBastion(
+        stack, "StaticBastion", vpc=vpc, db_targets=[db], ami="ami-0123456789abcdef0"
+    )
+    template = Template.from_stack(stack)
+
+    resources = template.find_resources(
+        "AWS::AutoScaling::LaunchConfiguration",
+        {
+            "Properties": {
+                "UserData": Match.object_like(
+                    {"Fn::Base64": Match.string_like_regexp("dnf-automatic")}
+                )
+            }
+        },
+    )
+    assert len(resources) == 0, "dnf-automatic should not be injected for custom AMIs"
+
+
 def test_sg_egress_rules(cdk_context: tuple[Stack, ec2.Vpc, rds.IDatabaseInstance]) -> None:
     stack, vpc, db = cdk_context
 
