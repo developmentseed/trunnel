@@ -44,14 +44,14 @@ def _select_resource[T: Discoverable](resources: list[T], label: str) -> T:
         return resources[0]
 
     click.secho(f"\nSelect a {label}:", fg="yellow", bold=True)
-    options = {r.id: r for r in resources}
-    for r in resources:
-        click.echo(f" • {click.style(r.id, fg='cyan')} - {r.name}")
+    for i, r in enumerate(resources, 1):
+        click.echo(f" {click.style(str(i), fg='cyan', bold=True)}) {r.id} - {r.name}")
 
-    choice_id = click.prompt(
-        f"\nEnter {label} ID", type=click.Choice(list(options.keys())), show_choices=False
+    choice = click.prompt(
+        f"\nEnter number",
+        type=click.IntRange(1, len(resources)),
     )
-    return options[choice_id]
+    return resources[choice - 1]
 
 
 def _verify_prerequisites() -> None:
@@ -66,7 +66,12 @@ def _verify_prerequisites() -> None:
 opt = partial(click.option, show_envvar=True)
 
 
-@click.command(context_settings={"auto_envvar_prefix": "TRUNNEL"})
+@click.group(context_settings={"auto_envvar_prefix": "TRUNNEL"})
+def main() -> None:
+    """Trunnel: Precision-bored SSM tunnels to private RDS instances."""
+
+
+@main.command()
 @click.pass_context
 @opt("--bastion-key", default="Role", show_default=True, help="Tag key for Bastion.")
 @opt("--bastion-value", default="Bastion", show_default=True, help="Tag value for Bastion.")
@@ -75,7 +80,7 @@ opt = partial(click.option, show_envvar=True)
 @opt("--local-port", default=5432, type=int, show_default=True)
 @opt("--profile", type=str, help="AWS CLI profile.")
 @opt("--reconnect", is_flag=True, help="Auto-retry on disconnect.")
-def main(
+def connect(
     ctx: click.Context,
     bastion_key: str,
     bastion_value: str,
@@ -147,3 +152,34 @@ def main(
         click.echo("\n👋 Trunnel interrupted. Goodbye!")
     else:
         click.echo("\n👋 Trunnel disconnected. Goodbye!")
+
+
+@main.command()
+@opt("--secret-key", required=True, help="Tag key to filter secrets.")
+@opt("--secret-value", required=True, help="Tag value to filter secrets.")
+@opt("--profile", type=str, help="AWS CLI profile.")
+def secrets(
+    secret_key: str,
+    secret_value: str,
+    profile: str | None,
+) -> None:
+    """
+    Fetch and print a Secrets Manager secret by tag.
+    """
+    discoverer = TunnelDiscoverer(session=boto3.Session(profile_name=profile))
+    click.echo("🔍 Searching AWS Secrets Manager...")
+
+    try:
+        found = discoverer.find_secrets(secret_key, secret_value)
+    except Exception as e:
+        raise click.ClickException(f"Secrets Lookup Failed: {e}") from e
+
+    target = _select_resource(found, "Secret")
+
+    try:
+        response = discoverer._secrets.get_secret_value(SecretId=target.id)
+    except Exception as e:
+        raise click.ClickException(f"Failed to fetch secret '{target.name}': {e}") from e
+
+    secret_value = response.get("SecretString") or response.get("SecretBinary", b"").decode()
+    click.echo(secret_value)
