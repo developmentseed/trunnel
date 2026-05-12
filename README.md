@@ -25,9 +25,9 @@
 
 Trunnel (a play on the [East Side Trolley Tunnel], or a wooden peg used to form a strong connection between pieces of
 wood) helps automate securely connecting to your private AWS infrastructure through AWS Systems Manager (SSM). It
-replaces manual SSH management with automated SSM discovery and a self-healing CDK bastion. Trunnel can discover
-the bastion and RDS instance you need to connect to, fetch database credentials stored in Secrets Manager, and
-bore the encrypted tunnel — all from a single CLI.
+replaces manual SSH management with automated SSM discovery and a self-healing CDK bastion. Trunnel can discover the
+bastion and RDS instance you need to connect to, fetch database credentials stored in Secrets Manager, and bore the
+encrypted tunnel — all from a single CLI.
 
 This tool was designed in response to help reduce minor frustrations like,
 
@@ -74,8 +74,8 @@ bastion.export_security_group("BastionSG-Production")
 
 ## Trunnel CLI
 
-The Trunnel CLI makes it easy to find the bastion host and connect to your RDS database via an encrypted SSM tunnel,
-and to fetch connection credentials stored in AWS Secrets Manager. Resources are located by tag `key=value` pairs.
+The Trunnel CLI makes it easy to find the bastion host and connect to your RDS database via an encrypted SSM tunnel, and
+to fetch connection credentials stored in AWS Secrets Manager. Resources are located by tag `key=value` pairs.
 
 ### Installation
 
@@ -98,11 +98,12 @@ Opens an encrypted SSM port-forward tunnel to a private RDS instance.
 $ trunnel connect --rds-key Service --rds-value payments-api --reconnect
 
 🔍 Searching AWS...
-Select a Bastion:
- • i-0abcd1234efgh5678 - Production-Bastion
- • i-09876fedcba54321 - Staging-Bastion
 
-Enter Bastion ID: i-0abcd1234efgh5678
+Select a Bastion:
+ 1) i-0abcd1234efgh5678 - Production-Bastion
+ 2) i-09876fedcba54321 - Staging-Bastion
+
+Enter number: 1
 
 🚎 Trunnel Active: localhost:5432 -> payments-api-db.cluster.aws.com
 🔗 payments-api-db via Production-Bastion (i-0abcd1234efgh5678)
@@ -145,10 +146,10 @@ If multiple secrets match the tag filter, Trunnel prompts you to choose:
 
 ```bash
 Select a Secret:
- • payments-api/db-credentials - Primary database credentials
- • payments-api/readonly-credentials - Read-only replica credentials
+ 1) payments-api/db-credentials - Primary database credentials
+ 2) payments-api/readonly-credentials - Read-only replica credentials
 
-Enter Secret ID: payments-api/db-credentials
+Enter number: 1
 ```
 
 ```bash
@@ -165,23 +166,69 @@ Options:
   --help            Show this message and exit.
 ```
 
+### trunnel psql
+
+Looks up credentials from Secrets Manager, opens an SSM tunnel, and drops you straight into a `psql` session. Requires
+`psql` to be installed alongside the AWS CLI prerequisites.
+
+```bash
+$ trunnel psql \
+    --rds-key Stack --rds-value payments-api \
+    --secret-key Stack --secret-value payments-api-user-alice
+
+🔍 Searching AWS...
+
+🚎 Opening tunnel: localhost:5432 -> payments-api-db.cluster.aws.com
+🔗 payments-api-db via Production-Bastion (i-0abcd1234efgh5678)
+⏳ Waiting for tunnel...
+🐘 Connecting as alice...
+psql (16.2)
+Type "help" for help.
+
+payments_api=#
+```
+
+The RDS and secret tags can differ — useful when a shared database has per-user secrets with different tags.
+
+```bash
+$ trunnel psql --help
+
+Usage: trunnel psql [OPTIONS]
+
+  Fetch credentials, open a tunnel, and launch psql.
+
+Options:
+  --bastion-key TEXT    Tag key for Bastion.  [env var: TRUNNEL_PSQL_BASTION_KEY; default: Role]
+  --bastion-value TEXT  Tag value for Bastion.  [env var: TRUNNEL_PSQL_BASTION_VALUE; default: Bastion]
+  --rds-key TEXT        Tag key for RDS.  [env var: TRUNNEL_PSQL_RDS_KEY; required]
+  --rds-value TEXT      Tag value for RDS.  [env var: TRUNNEL_PSQL_RDS_VALUE; required]
+  --secret-key TEXT     Tag key for the secret.  [env var: TRUNNEL_PSQL_SECRET_KEY; required]
+  --secret-value TEXT   Tag value for the secret.  [env var: TRUNNEL_PSQL_SECRET_VALUE; required]
+  --local-port INTEGER  [env var: TRUNNEL_PSQL_LOCAL_PORT; default: 5432]
+  --profile TEXT        AWS CLI profile.  [env var: TRUNNEL_PSQL_PROFILE]
+  --help                Show this message and exit.
+```
+
 ### Environment variables
 
 All options can be set via environment variables. Each subcommand has its own prefix:
 
-| Subcommand         | Prefix                  | Example                              |
-|--------------------|-------------------------|--------------------------------------|
-| `trunnel connect`  | `TRUNNEL_CONNECT_`      | `TRUNNEL_CONNECT_RDS_KEY=Service`    |
-| `trunnel secrets`  | `TRUNNEL_SECRETS_`      | `TRUNNEL_SECRETS_SECRET_KEY=Stack`   |
+| Subcommand        | Prefix             | Example                            |
+| ----------------- | ------------------ | ---------------------------------- |
+| `trunnel connect` | `TRUNNEL_CONNECT_` | `TRUNNEL_CONNECT_RDS_KEY=Service`  |
+| `trunnel secrets` | `TRUNNEL_SECRETS_` | `TRUNNEL_SECRETS_SECRET_KEY=Stack` |
+| `trunnel psql`    | `TRUNNEL_PSQL_`    | `TRUNNEL_PSQL_RDS_KEY=Stack`       |
 
 You might consider using [direnv](https://direnv.net/) to set these per project. For example,
 
 ```bash
 # .envrc
-export TRUNNEL_CONNECT_RDS_KEY=Service
+export TRUNNEL_CONNECT_RDS_KEY=Stack
 export TRUNNEL_CONNECT_RDS_VALUE=payments-api
-export TRUNNEL_SECRETS_SECRET_KEY=Stack
-export TRUNNEL_SECRETS_SECRET_VALUE=payments-api
+export TRUNNEL_PSQL_RDS_KEY=Stack
+export TRUNNEL_PSQL_RDS_VALUE=payments-api
+export TRUNNEL_PSQL_SECRET_KEY=Stack
+export TRUNNEL_PSQL_SECRET_VALUE=payments-api-user-alice
 ```
 
 [East Side Trolley Tunnel]: https://en.wikipedia.org/wiki/East_Side_Trolley_Tunnel

@@ -11,8 +11,8 @@ specifically for SSM-based tunneling.
 - **Auto-Rotation:** Automatically triggers an ASG Instance Refresh when a referenced SSM Parameter (AMI ID) is updated.
 - **Least Privilege:** Automatically manages Security Group egress/ingress based on the provided RDS targets using the
   CDK Connections API.
-- **Unattended Upgrades:** Automatically applies security updates on every instance launch via `dnf-automatic`
-  (Amazon Linux 2023 default).
+- **Unattended Upgrades:** Automatically applies security updates on every instance launch via `dnf-automatic` (Amazon
+  Linux 2023 default).
 
 ## Unattended Security Updates
 
