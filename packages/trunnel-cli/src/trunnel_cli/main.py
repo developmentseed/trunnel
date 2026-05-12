@@ -90,10 +90,12 @@ def _assert_port_free(port: int) -> None:
         pass  # port is free
 
 
-def _wait_for_port(port: int, timeout: float = 30.0) -> bool:
-    """Poll localhost:<port> until it accepts a connection or timeout expires."""
+def _wait_for_port(port: int, tunnel: subprocess.Popen[bytes], timeout: float = 30.0) -> bool:
+    """Poll localhost:<port> until it accepts a connection, the tunnel exits, or timeout expires."""
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
+        if tunnel.poll() is not None:
+            return False
         try:
             with socket.create_connection(("localhost", port), timeout=1):
                 return True
@@ -337,7 +339,7 @@ def psql(
     tunnel = subprocess.Popen(aws_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
         click.echo("⏳ Waiting for tunnel...")
-        if not _wait_for_port(local_port):
+        if not _wait_for_port(local_port, tunnel):
             raise click.ClickException(f"Tunnel did not become ready on port {local_port}.")
 
         psql_cmd = [
