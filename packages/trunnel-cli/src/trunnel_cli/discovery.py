@@ -168,6 +168,23 @@ class TunnelDiscoverer:
 
         return matches
 
+    def fetch_secret(self, secret_id: str) -> str:
+        """
+        Fetch the plaintext value of a secret by name or ARN.
+
+        Parameters
+        ----------
+        secret_id : str
+            The secret name or ARN.
+
+        Returns
+        -------
+        str
+            The secret's string value.
+        """
+        response = self._secrets.get_secret_value(SecretId=secret_id)
+        return response.get("SecretString") or response.get("SecretBinary", b"").decode()
+
     def find_secrets(self, tag_key: str, tag_value: str) -> list[Secret]:
         """
         Find Secrets Manager secrets by tag key/value pair.

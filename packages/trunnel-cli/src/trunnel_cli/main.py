@@ -10,7 +10,9 @@ import shutil
 import socket
 import subprocess
 import time
-from functools import partial
+from collections.abc import Callable, Generator
+from contextlib import contextmanager
+from typing import Any
 
 import boto3
 import click
@@ -54,6 +56,17 @@ def _select_resource[T: Discoverable](resources: list[T], label: str) -> T:
         type=click.IntRange(1, len(resources)),
     )
     return resources[choice - 1]
+
+
+@contextmanager
+def _aws_errors(label: str) -> Generator[None, None, None]:
+    """Translate unexpected AWS/boto3 exceptions into a clean ClickException."""
+    try:
+        yield
+    except click.ClickException:
+        raise
+    except Exception as e:
+        raise click.ClickException(f"{label}: {e}") from e
 
 
 def _verify_prerequisites() -> None:
@@ -127,7 +140,64 @@ def _build_ssm_cmd(
     return cmd
 
 
-opt = partial(click.option, show_envvar=True)
+# ---------------------------------------------------------------------------
+# Reusable option groups
+# ---------------------------------------------------------------------------
+
+opt = click.option
+
+
+def _bastion_opts(f: Callable[..., Any]) -> Callable[..., Any]:
+    f = opt(
+        "--bastion-value",
+        default="Bastion",
+        show_default=True,
+        show_envvar=True,
+        help="Tag value for Bastion.",
+    )(f)
+    f = opt(
+        "--bastion-key",
+        default="Role",
+        show_default=True,
+        show_envvar=True,
+        help="Tag key for Bastion.",
+    )(f)
+    return f
+
+
+def _rds_opts(f: Callable[..., Any]) -> Callable[..., Any]:
+    f = opt("--rds-value", required=True, show_envvar=True, help="Tag value for RDS.")(f)
+    f = opt("--rds-key", required=True, show_envvar=True, help="Tag key for RDS.")(f)
+    return f
+
+
+def _secret_opts(f: Callable[..., Any]) -> Callable[..., Any]:
+    f = opt(
+        "--secret-value",
+        required=True,
+        show_envvar=True,
+        help="Tag value for the Secrets Manager secret.",
+    )(f)
+    f = opt(
+        "--secret-key",
+        required=True,
+        show_envvar=True,
+        help="Tag key for the Secrets Manager secret.",
+    )(f)
+    return f
+
+
+def _profile_opt(f: Callable[..., Any]) -> Callable[..., Any]:
+    return opt("--profile", type=str, show_envvar=True, help="AWS CLI profile.")(f)
+
+
+def _local_port_opt(f: Callable[..., Any]) -> Callable[..., Any]:
+    return opt("--local-port", default=5432, type=int, show_default=True, show_envvar=True)(f)
+
+
+# ---------------------------------------------------------------------------
+# Commands
+# ---------------------------------------------------------------------------
 
 
 @click.group(context_settings={"auto_envvar_prefix": "TRUNNEL"})
@@ -136,16 +206,12 @@ def main() -> None:
 
 
 @main.command()
-@click.pass_context
-@opt("--bastion-key", default="Role", show_default=True, help="Tag key for Bastion.")
-@opt("--bastion-value", default="Bastion", show_default=True, help="Tag value for Bastion.")
-@opt("--rds-key", required=True, help="Tag key for RDS.")
-@opt("--rds-value", required=True, help="Tag value for RDS.")
-@opt("--local-port", default=5432, type=int, show_default=True)
-@opt("--profile", type=str, help="AWS CLI profile.")
-@opt("--reconnect", is_flag=True, help="Auto-retry on disconnect.")
+@_bastion_opts
+@_rds_opts
+@_local_port_opt
+@_profile_opt
+@opt("--reconnect", is_flag=True, show_envvar=True, help="Auto-retry on disconnect.")
 def connect(
-    ctx: click.Context,
     bastion_key: str,
     bastion_value: str,
     rds_key: str,
@@ -162,16 +228,12 @@ def connect(
     discoverer = TunnelDiscoverer(session=boto3.Session(profile_name=profile))
     click.echo("🔍 Searching AWS...")
 
-    try:
+    with _aws_errors("EC2 Lookup Failed"):
         target_bastion = _select_resource(
             discoverer.find_bastions(bastion_key, bastion_value), "Bastion"
         )
-    except Exception as e:
-        raise click.ClickException(f"EC2 Lookup Failed: {e}") from e
-    try:
+    with _aws_errors("RDS Lookup Failed"):
         target_rds = _select_resource(discoverer.find_rds(rds_key, rds_value), "RDS")
-    except Exception as e:
-        raise click.ClickException(f"RDS Lookup Failed: {e}") from e
 
     aws_cmd = _build_ssm_cmd(target_bastion.id, target_rds.id, target_rds.port, local_port, profile)
 
@@ -200,9 +262,8 @@ def connect(
 
 
 @main.command()
-@opt("--secret-key", required=True, help="Tag key to filter secrets.")
-@opt("--secret-value", required=True, help="Tag value to filter secrets.")
-@opt("--profile", type=str, help="AWS CLI profile.")
+@_secret_opts
+@_profile_opt
 def secrets(
     secret_key: str,
     secret_value: str,
@@ -214,31 +275,21 @@ def secrets(
     discoverer = TunnelDiscoverer(session=boto3.Session(profile_name=profile))
     click.echo("🔍 Searching AWS Secrets Manager...")
 
-    try:
-        found = discoverer.find_secrets(secret_key, secret_value)
-    except Exception as e:
-        raise click.ClickException(f"Secrets Lookup Failed: {e}") from e
+    with _aws_errors("Secrets Lookup Failed"):
+        target = _select_resource(discoverer.find_secrets(secret_key, secret_value), "Secret")
 
-    target = _select_resource(found, "Secret")
+    with _aws_errors(f"Failed to fetch secret '{target.name}'"):
+        secret_string = discoverer.fetch_secret(target.id)
 
-    try:
-        response = discoverer._secrets.get_secret_value(SecretId=target.id)
-    except Exception as e:
-        raise click.ClickException(f"Failed to fetch secret '{target.name}': {e}") from e
-
-    secret_value = response.get("SecretString") or response.get("SecretBinary", b"").decode()
-    click.echo(secret_value)
+    click.echo(secret_string)
 
 
 @main.command()
-@opt("--bastion-key", default="Role", show_default=True, help="Tag key for Bastion.")
-@opt("--bastion-value", default="Bastion", show_default=True, help="Tag value for Bastion.")
-@opt("--rds-key", required=True, help="Tag key for RDS.")
-@opt("--rds-value", required=True, help="Tag value for RDS.")
-@opt("--secret-key", required=True, help="Tag key for the Secrets Manager secret.")
-@opt("--secret-value", required=True, help="Tag value for the Secrets Manager secret.")
-@opt("--local-port", default=5432, type=int, show_default=True)
-@opt("--profile", type=str, help="AWS CLI profile.")
+@_bastion_opts
+@_rds_opts
+@_secret_opts
+@_local_port_opt
+@_profile_opt
 def psql(
     bastion_key: str,
     bastion_value: str,
@@ -259,31 +310,18 @@ def psql(
     discoverer = TunnelDiscoverer(session=boto3.Session(profile_name=profile))
     click.echo("🔍 Searching AWS...")
 
-    try:
+    with _aws_errors("EC2 Lookup Failed"):
         target_bastion = _select_resource(
             discoverer.find_bastions(bastion_key, bastion_value), "Bastion"
         )
-    except Exception as e:
-        raise click.ClickException(f"EC2 Lookup Failed: {e}") from e
-    try:
+    with _aws_errors("RDS Lookup Failed"):
         target_rds = _select_resource(discoverer.find_rds(rds_key, rds_value), "RDS")
-    except Exception as e:
-        raise click.ClickException(f"RDS Lookup Failed: {e}") from e
-    try:
+    with _aws_errors("Secrets Lookup Failed"):
         target_secret = _select_resource(
             discoverer.find_secrets(secret_key, secret_value), "Secret"
         )
-    except Exception as e:
-        raise click.ClickException(f"Secrets Lookup Failed: {e}") from e
-
-    try:
-        response = discoverer._secrets.get_secret_value(SecretId=target_secret.id)
-    except Exception as e:
-        raise click.ClickException(f"Failed to fetch secret '{target_secret.name}': {e}") from e
-
-    creds = _parse_db_secret(
-        response.get("SecretString") or response.get("SecretBinary", b"").decode()
-    )
+    with _aws_errors(f"Failed to fetch secret '{target_secret.name}'"):
+        creds = _parse_db_secret(discoverer.fetch_secret(target_secret.id))
 
     _assert_port_free(local_port)
 
