@@ -146,18 +146,16 @@ def _build_ssm_cmd(
 # Reusable option groups
 # ---------------------------------------------------------------------------
 
-opt = click.option
-
 
 def _bastion_opts(f: Callable[..., Any]) -> Callable[..., Any]:
-    f = opt(
+    f = click.option(
         "--bastion-value",
         default="Bastion",
         show_default=True,
         show_envvar=True,
         help="Tag value for Bastion.",
     )(f)
-    f = opt(
+    f = click.option(
         "--bastion-key",
         default="Role",
         show_default=True,
@@ -168,19 +166,19 @@ def _bastion_opts(f: Callable[..., Any]) -> Callable[..., Any]:
 
 
 def _rds_opts(f: Callable[..., Any]) -> Callable[..., Any]:
-    f = opt("--rds-value", required=True, show_envvar=True, help="Tag value for RDS.")(f)
-    f = opt("--rds-key", required=True, show_envvar=True, help="Tag key for RDS.")(f)
+    f = click.option("--rds-value", required=True, show_envvar=True, help="Tag value for RDS.")(f)
+    f = click.option("--rds-key", required=True, show_envvar=True, help="Tag key for RDS.")(f)
     return f
 
 
 def _secret_opts(f: Callable[..., Any]) -> Callable[..., Any]:
-    f = opt(
+    f = click.option(
         "--secret-value",
         required=True,
         show_envvar=True,
         help="Tag value for the Secrets Manager secret.",
     )(f)
-    f = opt(
+    f = click.option(
         "--secret-key",
         required=True,
         show_envvar=True,
@@ -190,11 +188,13 @@ def _secret_opts(f: Callable[..., Any]) -> Callable[..., Any]:
 
 
 def _profile_opt(f: Callable[..., Any]) -> Callable[..., Any]:
-    return opt("--profile", type=str, show_envvar=True, help="AWS CLI profile.")(f)
+    return click.option("--profile", type=str, show_envvar=True, help="AWS CLI profile.")(f)
 
 
 def _local_port_opt(f: Callable[..., Any]) -> Callable[..., Any]:
-    return opt("--local-port", default=5432, type=int, show_default=True, show_envvar=True)(f)
+    return click.option(
+        "--local-port", default=5432, type=int, show_default=True, show_envvar=True
+    )(f)
 
 
 # ---------------------------------------------------------------------------
@@ -212,7 +212,7 @@ def main() -> None:
 @_rds_opts
 @_local_port_opt
 @_profile_opt
-@opt("--reconnect", is_flag=True, show_envvar=True, help="Auto-retry on disconnect.")
+@click.option("--reconnect", is_flag=True, show_envvar=True, help="Auto-retry on disconnect.")
 def connect(
     bastion_key: str,
     bastion_value: str,
