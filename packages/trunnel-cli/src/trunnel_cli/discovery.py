@@ -183,7 +183,13 @@ class TunnelDiscoverer:
             The secret's string value.
         """
         response = self._secrets.get_secret_value(SecretId=secret_id)
-        return response.get("SecretString") or response.get("SecretBinary", b"").decode()
+        value = response.get("SecretString") or response.get("SecretBinary", b"").decode()
+        if not value:
+            raise ValueError(
+                f"Secret '{secret_id}' has no value. "
+                "Expected a secret stored as JSON in SecretString or SecretBinary."
+            )
+        return value
 
     def find_secrets(self, tag_key: str, tag_value: str) -> list[Secret]:
         """
