@@ -1,4 +1,4 @@
 {
   "packages/trunnel-cli": "0.2.0",
-  "packages/trunnel-infra": "0.3.0"
+  "packages/trunnel-infra": "1.0.0"
 }

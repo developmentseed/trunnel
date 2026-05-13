@@ -1,6 +1,6 @@
 [project]
 name = "trunnel-infra"
-version = "0.3.0"
+version = "1.0.0"
 description = "AWS CDK Construct for self-healing Trunnel Bastion hosts"
 readme = "README.md"
 requires-python = ">=3.12"
