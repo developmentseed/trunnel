@@ -1,6 +1,6 @@
 [project]
 name = "trunnel-cli"
-version = "0.2.0"
+version = "1.0.0"
 description = "Automated SSM tunneling for RDS"
 readme = "README.md"
 requires-python = ">=3.12"
