@@ -10,10 +10,10 @@ members = [
 
 [manifest.dependency-groups]
 dev = [
-    { name = "boto3-stubs", extras = ["ec2", "rds", "resourcegroupstaggingapi"], specifier = ">=1.34.0" },
     { name = "pytest", specifier = ">=8.0.0" },
     { name = "pytest-mock", specifier = ">=3.14.0" },
     { name = "ruff", specifier = ">=0.6.0" },
+    { name = "trunnel-cli", extras = ["types"], editable = "packages/trunnel-cli" },
     { name = "ty", specifier = ">=0.0.18" },
 ]
 
@@ -122,6 +122,9 @@ rds = [
 ]
 resourcegroupstaggingapi = [
     { name = "mypy-boto3-resourcegroupstaggingapi" },
+]
+secretsmanager = [
+    { name = "mypy-boto3-secretsmanager" },
 ]
 
 [[package]]
@@ -271,6 +274,15 @@ wheels = [
 ]
 
 [[package]]
+name = "mypy-boto3-secretsmanager"
+version = "1.42.8"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/f7/58/ccae71b7b7f550eab01d600e956d57e6e6bb9148dbf5d116696d0dc43369/mypy_boto3_secretsmanager-1.42.8.tar.gz", hash = "sha256:5ab42f35ce932765ebb1684146f478a87cc4b83bef950fd1aa0e268b88d59c81", size = 19863, upload-time = "2025-12-11T22:12:51.045Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1a/42/90cef7241c98f6e504cabc9a99d89dd38b84e4d40ff0774c89bc871ffb18/mypy_boto3_secretsmanager-1.42.8-py3-none-any.whl", hash = "sha256:50c891a88e725a8dba7444018e47590ea63d8e938abe2b1c0b25e5413f39d51d", size = 27243, upload-time = "2025-12-11T22:12:44.389Z" },
+]
+
+[[package]]
 name = "packaging"
 version = "26.0"
 source = { registry = "https://pypi.org/simple" }
@@ -394,7 +406,7 @@ wheels = [
 
 [[package]]
 name = "trunnel-cli"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "packages/trunnel-cli" }
 dependencies = [
     { name = "boto3" },
@@ -403,20 +415,20 @@ dependencies = [
 
 [package.optional-dependencies]
 types = [
-    { name = "boto3-stubs", extra = ["ec2", "rds", "resourcegroupstaggingapi"] },
+    { name = "boto3-stubs", extra = ["ec2", "rds", "resourcegroupstaggingapi", "secretsmanager"] },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "boto3", specifier = ">=1.34.0" },
-    { name = "boto3-stubs", extras = ["ec2", "rds", "resourcegroupstaggingapi"], marker = "extra == 'types'", specifier = ">=1.34.0" },
+    { name = "boto3-stubs", extras = ["ec2", "rds", "resourcegroupstaggingapi", "secretsmanager"], marker = "extra == 'types'", specifier = ">=1.34.0" },
     { name = "click", specifier = ">=8.1.0" },
 ]
 provides-extras = ["types"]
 
 [[package]]
 name = "trunnel-infra"
-version = "0.1.0"
+version = "0.3.0"
 source = { editable = "packages/trunnel-infra" }
 dependencies = [
     { name = "aws-cdk-lib" },
