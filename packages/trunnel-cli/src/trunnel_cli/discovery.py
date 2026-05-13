@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from mypy_boto3_ec2 import EC2Client
     from mypy_boto3_rds import RDSClient
     from mypy_boto3_resourcegroupstaggingapi import ResourceGroupsTaggingAPIClient
+    from mypy_boto3_secretsmanager import SecretsManagerClient
 
 
 @dataclass
@@ -28,7 +29,15 @@ class Database:
     port: int
 
 
-type Discoverable = Bastion | Database
+@dataclass
+class Secret:
+    """Secrets Manager secret metadata."""
+
+    id: str
+    name: str
+
+
+type Discoverable = Bastion | Database | Secret
 
 
 @dataclass
@@ -46,12 +55,15 @@ class TunnelDiscoverer:
         Injected RDS client.
     tag_client : ResourceGroupsTaggingAPIClient, optional
         Resource tagging API client.
+    secrets_client : SecretsManagerClient, optional
+        Injected Secrets Manager client.
     """
 
     session: boto3.Session = field(default_factory=lambda: boto3.Session())
     ec2_client: EC2Client | None = None
     rds_client: RDSClient | None = None
     tag_client: ResourceGroupsTaggingAPIClient | None = None
+    secrets_client: SecretsManagerClient | None = None
 
     def __post_init__(self) -> None:
         """
@@ -61,6 +73,9 @@ class TunnelDiscoverer:
         self._rds: RDSClient = self.rds_client or self.session.client("rds")
         self._tags: ResourceGroupsTaggingAPIClient = self.tag_client or self.session.client(
             "resourcegroupstaggingapi"
+        )
+        self._secrets: SecretsManagerClient = self.secrets_client or self.session.client(
+            "secretsmanager"
         )
 
     def find_bastions(self, key: str, value: str) -> list[Bastion]:
@@ -152,3 +167,54 @@ class TunnelDiscoverer:
                     )
 
         return matches
+
+    def fetch_secret(self, secret_id: str) -> str:
+        """
+        Fetch the plaintext value of a secret by name or ARN.
+
+        Parameters
+        ----------
+        secret_id : str
+            The secret name or ARN.
+
+        Returns
+        -------
+        str
+            The secret's string value.
+        """
+        response = self._secrets.get_secret_value(SecretId=secret_id)
+        value = response.get("SecretString") or response.get("SecretBinary", b"").decode()
+        if not value:
+            raise ValueError(
+                f"Secret '{secret_id}' has no value. "
+                "Expected a secret stored as JSON in SecretString or SecretBinary."
+            )
+        return value
+
+    def find_secrets(self, tag_key: str, tag_value: str) -> list[Secret]:
+        """
+        Find Secrets Manager secrets by tag key/value pair.
+
+        Parameters
+        ----------
+        tag_key : str
+            The tag key to filter by.
+        tag_value : str
+            The tag value to filter by.
+
+        Returns
+        -------
+        list[Secret]
+            A list of discovered Secret resources.
+        """
+        paginator = self._secrets.get_paginator("list_secrets")
+        secrets: list[Secret] = []
+        for page in paginator.paginate(
+            Filters=[
+                {"Key": "tag-key", "Values": [tag_key]},
+                {"Key": "tag-value", "Values": [tag_value]},
+            ]
+        ):
+            for s in page.get("SecretList", []):
+                secrets.append(Secret(id=s["Name"], name=s.get("Description") or s["Name"]))
+        return secrets
